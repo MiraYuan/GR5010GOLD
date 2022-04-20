@@ -1,0 +1,90 @@
+---
+title: "5010project"
+author: "Jiayi Yuan"
+date: '2022-04-18'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(TSstudio)
+library(MASS)
+Gold <- read_xlsx("5010DATA.xlsx", sheet = "Gold")
+
+Gold$Date <- as.Date(Gold$Date, format = "%Y-%m-%d")
+#class(Gold$Date)
+ts_plot(Gold[-nrow(Gold),-2], slider = TRUE, 
+        title = "Monthly PricePercentage Change Gold Price From 2003-2022", 
+        Xtitle = "Percentage Change", Ytitle = "Price(USD)")
+
+ts_plot(Gold[,-3], slider = TRUE, 
+        title = "Monthly Price Change Gold Price From 2003-2022", 
+        Xtitle = "Time", Ytitle = "Price(USD)")
+```
+
+```{r}
+library(forecast)
+library(survMisc)
+library(zoo)
+
+price <- ts(Gold$`Last Price`, frequency = 12, start = c(2003, 1), end = c(2022, 4))
+price
+percent <- ts(Gold[-nrow(Gold),3], frequency = 12, start = c(2003, 1), end = c(2022, 4))
+percent
+components.p <- decompose(percent)
+plot(components.p)
+# bc <- boxcox(price ~ 1)
+# lam <- bc$x[which.max(bc$y)]
+# lam
+# ts_plot(BoxCox(price, lam))
+```
+Notice what happens when lambda equals 1. In that case, our data shifts down but the shape of the data does not change. Therefore, if the optimal value for lambda is 1, then the data is already normally distributed, and the Box-Cox transformation is unnecessary.
+
+
+```{r}
+library(ggplot2)
+library(forecast)
+library(tseries)
+fit <- auto.arima(price)
+checkresiduals(fit)
+plot(forecast(fit, h = 60))
+
+fitp <- auto.arima(percent)
+predict(fitp, n.ahead = 12)
+checkresiduals(fitp)
+adf.test(percent) ###station
+
+plot(forecast(fitp, h = 30),include = 20)
+
+percent %>% stl(s.window='periodic') %>% seasadj() -> ggadj
+plot(forecast(auto.arima(ggadj), h=30), include = 20)
+abline(h=0, col = "dark red")
+```
+The ACF plot of the residuals from the ARIMA(0,1,1) model shows that all autocorrelations are within the threshold limits, indicating that the residuals are behaving like white noise. A portmanteau test returns a large p-value, also suggesting that the residuals are white noise. Residuals are almost normally distributed. The autocorrelation plot shows that for the first 12 lags, all sample autocorrelations except those at lags 6 and 11 fall inside the 95 % confidence bounds indicating the residuals appear to be random and we do not need any transformation. 
+
+```{r, useless}
+acf(Gold$`Last Price`)
+acf(Gold$Percent) ##p=1
+pacf(Gold$Percent) ##q=0
+
+###No need to diff
+##Agree with auto.arima
+lambdap <- BoxCox.lambda(percent)
+ndiffs(BoxCox(percent, lambdap)) ###d=0
+
+lambda <- BoxCox.lambda(price)
+ndiffs(BoxCox(price,lambda)) ###d=1
+diff <- diff(Gold$`Last Price`)
+ts.plot(diff)
+acf(diff) ###p=5
+pacf(diff) ###q=5
+```
+
+
+
+
